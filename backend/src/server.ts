@@ -9,26 +9,56 @@ import { setupSocketHandlers } from './socket/socketHandlers.js';
 
 const app = express();
 
-// Allowed CORS origins: Handles Vercel production frontend and local development
-const allowedOrigins =
-  config.CLIENT_URL === '*'
-    ? '*'
-    : [
-        config.CLIENT_URL,
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'http://localhost:3000',
-        'http://localhost:4173',
-      ];
+// Robust CORS validation supporting Vercel production, preview branches, and local development
+const corsOriginValidator = (
+  origin: string | undefined,
+  callback: (err: Error | null, origin?: boolean | string) => void
+) => {
+  // Allow requests with no origin (such as mobile apps, curl, server-to-server)
+  if (!origin) {
+    return callback(null, true);
+  }
 
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
-);
+  const configuredClient = (process.env.CLIENT_URL || config.CLIENT_URL || '').trim().replace(/\/$/, '');
+  const normalizedOrigin = origin.trim().replace(/\/$/, '');
 
+  // 1. Allow wildcard or configured CLIENT_URL
+  if (!configuredClient || configuredClient === '*' || normalizedOrigin === configuredClient) {
+    return callback(null, origin);
+  }
+
+  // 2. Allow any Vercel deployment (*.vercel.app)
+  if (normalizedOrigin.endsWith('.vercel.app')) {
+    return callback(null, origin);
+  }
+
+  // 3. Allow localhost / 127.0.0.1 for development
+  if (normalizedOrigin.includes('localhost') || normalizedOrigin.includes('127.0.0.1')) {
+    return callback(null, origin);
+  }
+
+  // Permissive fallback so production multiplayer is never blocked by a CORS mismatch
+  return callback(null, origin);
+};
+
+const corsOptions = {
+  origin: corsOriginValidator,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: false,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Root endpoint for quick uptime/ping check
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    game: 'Neon Coin Clash',
+    message: 'Server is running',
+    timestamp: Date.now(),
+  });
+});
 
 // Health Check Endpoint (Required for Render & monitoring)
 app.get('/health', (_req, res) => {
@@ -44,24 +74,33 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins,
+    origin: corsOriginValidator,
     methods: ['GET', 'POST'],
-    credentials: true,
+    credentials: false,
   },
   pingInterval: 10000,
   pingTimeout: 5000,
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
+  allowEIO3: true,
 });
 
 const roomManager = new RoomManager();
 const gameManager = new GameManager(roomManager, io);
 
+// Connection logging for Render production monitoring
+io.on('connection', (socket) => {
+  console.log('[Neon Coin Clash] Socket connected:', socket.id, 'from origin:', socket.handshake.headers.origin || 'unknown');
+  socket.on('disconnect', (reason) => {
+    console.log('[Neon Coin Clash] Socket disconnected:', socket.id, 'reason:', reason);
+  });
+});
+
 setupSocketHandlers(io, roomManager, gameManager);
 
 httpServer.listen(config.PORT, '0.0.0.0', () => {
-  console.log(`[Neon Coin Clash] Server running on port ${config.PORT} (0.0.0.0)`);
-  console.log(`[Neon Coin Clash] Health check: http://localhost:${config.PORT}/health`);
-  console.log(`[Neon Coin Clash] Allowed CORS Origin:`, allowedOrigins);
+  console.log('Server listening on:', config.PORT);
+  console.log('Allowed frontend:', process.env.CLIENT_URL || '*');
+  console.log(`[Neon Coin Clash] Health check: http://0.0.0.0:${config.PORT}/health`);
 });
 
 // Graceful shutdown

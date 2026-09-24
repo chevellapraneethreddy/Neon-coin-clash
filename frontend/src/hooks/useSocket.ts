@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { socket } from '../lib/socket.js';
+import { socket, SOCKET_URL } from '../lib/socket.js';
 import { sounds } from '../lib/sound.js';
 import type {
   Coin,
@@ -25,6 +25,7 @@ export function useSocket() {
   const [results, setResults] = useState<ResultsData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [recentPickup, setRecentPickup] = useState<{ id: string; x: number; y: number; text: string } | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const lastInputRef = useRef<PlayerInput>({ up: false, down: false, left: false, right: false });
 
@@ -39,11 +40,17 @@ export function useSocket() {
   useEffect(() => {
     function onConnect() {
       setIsConnected(true);
+      setConnectionError(null);
       setPlayerId(socket.id || null);
     }
 
     function onDisconnect() {
       setIsConnected(false);
+    }
+
+    function onConnectError(err: Error) {
+      setIsConnected(false);
+      setConnectionError(err.message || 'Connection failed');
     }
 
     function onRoomCreated(data: { roomCode: string; playerId: string; isHost: boolean }) {
@@ -150,6 +157,7 @@ export function useSocket() {
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
     socket.on('room_created', onRoomCreated);
     socket.on('room_joined', onRoomJoined);
     socket.on('lobby_updated', onLobbyUpdated);
@@ -173,6 +181,7 @@ export function useSocket() {
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onConnectError);
       socket.off('room_created', onRoomCreated);
       socket.off('room_joined', onRoomJoined);
       socket.off('lobby_updated', onLobbyUpdated);
@@ -230,6 +239,8 @@ export function useSocket() {
 
   return {
     isConnected,
+    socketUrl: SOCKET_URL,
+    connectionError,
     roomCode,
     playerId,
     isHost,

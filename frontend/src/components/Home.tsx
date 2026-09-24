@@ -1,22 +1,43 @@
-import React, { useState } from 'react';
-import { Play, Users, Sparkles, Volume2, VolumeX, ShieldCheck, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Play, Users, Sparkles, Volume2, VolumeX, ShieldCheck, Zap, Settings, RefreshCw } from 'lucide-react';
 import { sounds } from '../lib/sound.js';
 
 interface HomeProps {
   onCreateRoom: (name: string) => void;
   onJoinRoomClick: (name: string) => void;
   isConnected: boolean;
+  socketUrl?: string;
+  connectionError?: string | null;
 }
 
 export const Home: React.FC<HomeProps> = ({
   onCreateRoom,
   onJoinRoomClick,
   isConnected,
+  socketUrl = '',
+  connectionError,
 }) => {
   const [playerName, setPlayerName] = useState(() => {
     return localStorage.getItem('ncc_player_name') || `Rider_${Math.floor(100 + Math.random() * 900)}`;
   });
   const [muted, setMuted] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [customUrl, setCustomUrl] = useState(() => {
+    return localStorage.getItem('ncc_socket_url') || socketUrl || '';
+  });
+  const [connectTime, setConnectTime] = useState(0);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    if (!isConnected) {
+      timer = setInterval(() => {
+        setConnectTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setConnectTime(0);
+    }
+    return () => clearInterval(timer);
+  }, [isConnected]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.slice(0, 15);
@@ -37,6 +58,16 @@ export const Home: React.FC<HomeProps> = ({
     setMuted(isNowMuted);
   };
 
+  const saveCustomUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customUrl.trim()) {
+      localStorage.setItem('ncc_socket_url', customUrl.trim());
+    } else {
+      localStorage.removeItem('ncc_socket_url');
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[90vh] px-4 py-8">
       {/* Sound Toggle & Status Bar */}
@@ -44,12 +75,23 @@ export const Home: React.FC<HomeProps> = ({
         <div className="flex items-center gap-2 text-xs font-arcade tracking-wider">
           <span
             className={`w-2.5 h-2.5 rounded-full ${
-              isConnected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'
+              isConnected
+                ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+                : 'bg-rose-500 shadow-[0_0_8px_#f43f5e] animate-pulse'
             }`}
           />
-          <span className="text-slate-400">
+          <span className={isConnected ? 'text-emerald-400' : 'text-slate-400'}>
             {isConnected ? 'SERVER ONLINE' : 'CONNECTING TO SERVER...'}
           </span>
+          {!isConnected && (
+            <button
+              onClick={() => setShowConfig(!showConfig)}
+              className="text-slate-500 hover:text-cyan-400 ml-1 transition-colors"
+              title="Configure Server URL"
+            >
+              <Settings size={13} />
+            </button>
+          )}
         </div>
 
         <button
@@ -61,6 +103,64 @@ export const Home: React.FC<HomeProps> = ({
           <span className="font-arcade">{muted ? 'MUTED' : 'SFX ON'}</span>
         </button>
       </div>
+
+      {/* Connection troubleshooting helper if taking > 4s or if config open */}
+      {(!isConnected && connectTime >= 4) || showConfig ? (
+        <div className="w-full max-w-md mb-6 p-4 rounded-xl bg-slate-900/90 border border-cyan-500/40 text-xs text-slate-300 font-cyber shadow-lg">
+          <div className="flex items-center justify-between font-arcade text-cyan-300 mb-2">
+            <span className="flex items-center gap-1.5">
+              <RefreshCw size={13} className={!isConnected ? 'animate-spin' : ''} />
+              BACKEND CONNECTION STATUS
+            </span>
+            <button
+              onClick={() => setShowConfig(false)}
+              className="text-slate-500 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+
+          <p className="text-slate-400 mb-2">
+            Targeting server:{' '}
+            <span className="font-mono text-cyan-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 break-all">
+              {socketUrl || 'http://localhost:3001'}
+            </span>
+          </p>
+
+          {!isConnected && connectTime >= 8 && (
+            <p className="text-amber-400/90 mb-3 bg-amber-950/30 p-2 rounded border border-amber-500/30">
+              💡 <strong>Render Free Tier Note:</strong> Render services sleep after 15 minutes of inactivity and can take ~30–50 seconds to wake up on the first connection. Please wait a moment.
+            </p>
+          )}
+
+          {connectionError && (
+            <p className="text-rose-400 mb-2 bg-rose-950/30 p-2 rounded border border-rose-500/30">
+              Error: {connectionError}
+            </p>
+          )}
+
+          <form onSubmit={saveCustomUrl} className="mt-3 pt-3 border-t border-slate-800 space-y-2">
+            <label className="block text-[11px] font-arcade text-slate-400">
+              Render Backend URL (override):
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={customUrl}
+                onChange={(e) => setCustomUrl(e.target.value)}
+                placeholder="https://YOUR-BACKEND.onrender.com"
+                className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-cyan-200 text-xs font-mono focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-lg bg-cyan-500 text-black font-arcade font-bold text-xs hover:bg-cyan-400"
+              >
+                CONNECT
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {/* Main Title Hero */}
       <div className="text-center mb-8 relative">

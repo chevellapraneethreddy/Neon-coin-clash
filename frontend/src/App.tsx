@@ -19,6 +19,8 @@ export const App: React.FC = () => {
 
   const {
     isConnected,
+    socketUrl,
+    connectionError,
     roomCode,
     playerId,
     isHost,
@@ -79,6 +81,8 @@ export const App: React.FC = () => {
                 setScreen('JOIN');
               }}
               isConnected={isConnected}
+              socketUrl={socketUrl}
+              connectionError={connectionError}
             />
           )}
 
