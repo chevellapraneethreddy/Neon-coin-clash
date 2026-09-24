@@ -1,0 +1,16 @@
+{
+  "name": "neon-coin-clash",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "build": "npm --prefix frontend run build && npm --prefix backend run build",
+    "start": "npm --prefix backend run start",
+    "test:multiplayer": "npm --prefix backend run test:multiplayer",
+    "test:lobby": "npm --prefix backend run test:lobby"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
